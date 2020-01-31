@@ -1,0 +1,14 @@
+
+.idea/
+
+.DS_Store
+
+dist/
+
+build/
+
+MDutils.egg-info/
+
+MDutils/crdfgen.c
+
+MDutils/crdfgen.html
