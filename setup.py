@@ -12,7 +12,7 @@ setup(
     packages=['MDutils'],
     ext_modules=cythonize(extensions, language_level="3", annotate=True),
     url='https://github.com/t-young31/MDutils',
-    entry_points={'console_scripts': ['rdfgen = MDutils.rdfgen:main']},
+    entry_points={'console_scripts': ['rdfgen = MDutils.rdfgen:main', 'traj2xyz = MDutils.traj2xyz:main']},
     license='MIT',
     author='Tom Young',
     author_email='tom.young@chem.ox.ac.uk',

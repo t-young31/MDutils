@@ -2,3 +2,4 @@ numpy
 ase
 scipy
 Cython
+ase
