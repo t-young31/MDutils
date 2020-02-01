@@ -3,3 +3,4 @@ ase
 scipy
 Cython
 ase
+matplotlib

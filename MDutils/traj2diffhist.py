@@ -9,6 +9,16 @@ import networkx as nx
 from scipy.spatial import distance_matrix
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
+
+
+def get_args():
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", action='store', type=str, help='Trajectory filename (.traj,)')
+    parser.add_argument("-pv", '--plotVACF', action='store_true', default=False, help='Plot the VACF')
+
+    return parser.parse_args()
 
 
 def get_waters_idxs(atoms, max_oh_bond_length=1.2):
@@ -71,6 +81,7 @@ def get_water_com_traj_velocities(trajectory):
 
         traj_vels.append(com_velocities)
 
+    print(f'Generated COM velocities for {len(waters_idxs)} waters for {len(traj_vels)} timesteps')
     return np.array(traj_vels)
 
 
@@ -99,7 +110,17 @@ def get_water_com_velocities(vels, waters_idxs, o_mass=16.0, h_mass=1.01):
     return np.array(com_velocities)
 
 
-def calc_vacf(traj_vels):
+def calc_vacf(traj_vels, mol_id=None, plot=False):
+    """
+    Calculate the velocity auto-correlation function (VACF)
+
+    phi(t) = <v(t).v(t0)>  where the ensemble average is taken over the possible time origins
+
+    :param traj_vels:
+    :param mol_id:
+    :param plot:
+    :return:
+    """
 
     n_steps = traj_vels.shape[0]
     n_mols = traj_vels.shape[1]
@@ -108,19 +129,37 @@ def calc_vacf(traj_vels):
     for time_origin in np.arange(n_steps - 1):
         for t in range(time_origin + 1, n_steps):
 
-            # Compute cumulative VACF value for time = t
-            vdotvs = [np.dot(traj_vels[t, i], traj_vels[time_origin, i]) for i in range(n_mols)]
-            vacf[t-time_origin - 1] += np.average(np.array(vdotvs))
-            # vacf[t-time_origin - 1] += np.dot(traj_vels[t, 0], traj_vels[time_origin, 0])
+            # Compute cumulative VACF value for time = t either for a single molecule(/index) or averaged
+            # over all velocities
 
-    plt.scatter(np.arange(n_steps - 1), vacf)
-    plt.show()
-    exit()
+            if mol_id is not None:
+                vacf[t - time_origin - 1] += np.dot(traj_vels[t, mol_id], traj_vels[time_origin, mol_id])
 
-    return None
+            else:
+                vdotvs = [np.dot(traj_vels[t, i], traj_vels[time_origin, i]) for i in range(n_mols)]
+                vacf[t - time_origin - 1] += np.average(np.array(vdotvs))
+
+    vacf /= (n_steps - 1)       # Divide the cumulative VACF by the number of time origins taken
+
+    if plot:
+        plt.scatter(np.arange(n_steps - 1), vacf, s=2)
+        plt.ylabel('VACF')
+        plt.xlabel('Timestep')
+        plt.savefig('vacf.png')
+
+    return vacf
+
+
+def calc_diffusion_coefficient(vacf_):
+    return (1.0 / 3.0) * np.trapz(vacf_, dx=1.0)
 
 
 if __name__ == '__main__':
 
-    traj_velocities = get_water_com_traj_velocities(trajectory=Trajectory('moldyn3.traj', 'r'))
-    calc_vacf(traj_vels=traj_velocities)
+    args = get_args()
+
+    traj_velocities = get_water_com_traj_velocities(trajectory=Trajectory(args.filename, 'r'))
+    vacf = calc_vacf(traj_vels=traj_velocities, plot=args.plotVACF)
+    d = calc_diffusion_coefficient(vacf_=vacf)
+
+    print(f'Diffusion coefficent = {d} au.')
