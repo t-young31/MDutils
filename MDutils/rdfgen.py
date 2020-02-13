@@ -5,12 +5,9 @@ Calculate the RDF M - O RDF from a trajectory given as xyzs. The metal atom must
 first argument is the filename the second is the box size in angstroms
 """
 import os
-import sys
 import numpy as np
-from scipy.spatial import distance_matrix
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from copy import deepcopy
 import argparse
 import crdfgen
 
@@ -37,7 +34,9 @@ def get_args():
 
     parser.add_argument('-p', '--plot', action='store_true', default=False, help='Generate a RDF plot')
 
-    parser.add_argument('-b', '--boxlength', action='store', type=float, help='Length of the box in Å')
+    parser.add_argument('-l', '--boxlength', action='store', type=float, help='Length of the box in Å')
+    parser.add_argument('-f', '--firstframe', action='store', type=int, default=0,
+                        help='First frame of the trajectory to calculate the RDF from')
     parser.add_argument('-w', '--binwidth', action='store', type=float, help='Size of the bins to plot the RDF in')
 
     return parser.parse_args()
@@ -75,7 +74,7 @@ def get_elem1_elem2_ids(xyzs, elem1_name, elem2_name):
     return elem1_ids, elem2_ids
 
 
-def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size):
+def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size, first_frame):
     """
     From an MD(/MC) trajectory filename compute the radial distribution function (RDF) from elem1–elem2 e.g. Pd–O.
     Note the whole file will be read into memory, which may be slow/impossible if the trajectory is large
@@ -85,6 +84,7 @@ def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size):
     :param elem2: (str)
     :param box_length: (float) Å
     :param bin_size: (float) Å
+    :param first_frame: (int) first frame of the trajectory to read
     :return:
     """
     try:
@@ -99,8 +99,8 @@ def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size):
     traj_file_lines = open(xyz_traj_filename, 'r').readlines()
     n_atoms = get_n_atoms(traj_file_lines)
 
-    # Read the trajectory points and generate the histogram of frequencies
-    n = 0
+    # Iterate from the first frame
+    n = first_frame
 
     # Set up the lists of the bin edges and the total frequency of atoms found
     n_bins, bin_edges = int(box_length / (2 * bin_size)), None
@@ -113,7 +113,7 @@ def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size):
             xyzs.append([atom_label, float(x), float(y), float(z)])
 
         # If the first trajectory point, get the element ids of elem1 and elem2 which should not change
-        if n == 0:
+        if n == first_frame:
             elem1_ids, elem2_ids = get_elem1_elem2_ids(xyzs, elem1_name=elem1, elem2_name=elem2)
 
         # Use Cython extension to construct the supercell and calculate the distances between elem1 – elem2
@@ -141,11 +141,11 @@ def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size):
 def main():
     args = get_args()
     rs, densities = get_rdf_arrays(xyz_traj_filename=args.filename, elem1=args.elem_1, elem2=args.elem_2,
-                                   box_length=args.boxlength, bin_size=args.binwidth)
+                                   box_length=args.boxlength, bin_size=args.binwidth, first_frame=args.firstframe)
 
     if args.plot:
-        plt.plot(rs, densities)
-        plt.xlabel('$\\rho(r)$')
+        plt.plot(rs, densities, lw=1.5)
+        plt.ylabel('$\\rho(r)$')
         plt.xlabel(f'r({args.elem_1}–{args.elem_2}) / Å')
         plt.xlim(0.0, args.boxlength/2.0)
         plt.ylim(-0.2, 2.0)
