@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import argparse
 import crdfgen
+from scipy.integrate import trapz
 
 mpl.rcParams['figure.dpi'] = 200
 mpl.rcParams['axes.titlesize'] = 24
@@ -125,35 +126,58 @@ def get_rdf_arrays(xyz_traj_filename, elem1, elem2, box_length, bin_size, first_
         cummulative_hist += np.array(hist)
         n += 1
 
+    average_hist = cummulative_hist / (n - first_frame)
+
     # Frequencies and bin edges -> r and densities for plotting p(r) vs r
     r_vals = [(bin_edges[i] + bin_edges[i + 1]) / 2.0 for i in range(len(bin_edges) - 1)]
 
-    # Normalise the frequency by the volume between r and r + dr
-    dens = [cummulative_hist[i] / (4.0 / 3.0 * np.pi * (bin_edges[i+1] ** 3 - bin_edges[i] ** 3)) for i in
-            range(len(cummulative_hist))]
+    # Divide the frequency by the volume between r and r + dr to get the density
+    rho_vals = [average_hist[i] / (4.0 / 3.0 * np.pi * (bin_edges[i+1] ** 3 - bin_edges[i] ** 3)) for i in
+                range(len(average_hist))]
 
-    # Normalise the densities by their final value
-    norm_densities = [(dens[i] / dens[-1]) for i in range(len(dens))]
+    # Normalise by the total density to get the pair correlation function
+    total_density = sum(average_hist) / (4.0 / 3.0 * np.pi * bin_edges[-1]**3)
+    g_vals = np.array(rho_vals) / total_density
 
-    return r_vals, norm_densities
+    return r_vals, g_vals, total_density
+
+
+def get_int_r(gs, rho, rs):
+    """Get the integral of the pair correlation function, as a function of distance"""
+    integrals = []
+
+    integrand = [rs[i]**2 * gs[i] for i in range(len(rs))]
+
+    for i in range(len(rs)):
+        integral = rho * 4 * np.pi * trapz(integrand[:i], rs[:i])
+        integrals.append(integral)
+
+    return integrals
 
 
 def main():
     args = get_args()
-    rs, densities = get_rdf_arrays(xyz_traj_filename=args.filename, elem1=args.elem_1, elem2=args.elem_2,
-                                   box_length=args.boxlength, bin_size=args.binwidth, first_frame=args.firstframe)
+    rs, gs, rho = get_rdf_arrays(xyz_traj_filename=args.filename, elem1=args.elem_1, elem2=args.elem_2,
+                                 box_length=args.boxlength, bin_size=args.binwidth, first_frame=args.firstframe)
 
     if args.plot:
-        plt.plot(rs, densities, lw=1.5)
-        plt.ylabel('$\\rho(r)$')
-        plt.xlabel(f'r({args.elem_1}–{args.elem_2}) / Å')
-        plt.xlim(0.0, args.boxlength/2.0)
-        plt.ylim(-0.2, 2.0)
+        fig, ax = plt.subplots()
+        ax.plot(rs, gs, lw=1.5)
+        ax.set_ylabel('$g(r)$')
+
+        ax2 = ax.twinx()
+        ax2.plot(rs, get_int_r(gs, rho, rs), ls='--', c='k')
+        ax2.set_ylabel('int($g(r)$)')
+        ax2.set_ylim(-0.05, 10.0)
+
+        ax.set_xlabel(f'$r$({args.elem_1}–{args.elem_2}) / Å')
+        ax.set_xlim(0.0, args.boxlength/2.0)
+        ax.set_ylim(-0.01, 2.0)
         plt.savefig('rdf.png', dpi=300)
 
-    print('rs: ', [np.round(r, 4) for r in rs], sep='\n')
+    print('r:    ', [np.round(r, 4) for r in rs], sep='\n')
     print()
-    print('densities: ', [np.round(d, 4) for d in densities], sep='\n')
+    print('g(r): ', [np.round(d, 4) for d in gs], sep='\n')
 
     return None
 
